@@ -1,0 +1,41 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b0b0b;
+  color: white;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+header {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+select {
+  padding: 6px 10px;
+  font-size: 1rem;
+}
+
+video {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 140px;
+  opacity: 0.2;
+  border-radius: 8px;
+}
+
+#scene {
+  width: 100vw;
+  height: 100vh;
+}
