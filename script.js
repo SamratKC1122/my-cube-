@@ -2,8 +2,11 @@
 // THREE.JS SETUP
 // ======================
 let scene, camera, renderer, cubeGroup;
+let cubeSize = 3;
 
 function initCube(size) {
+  cubeSize = size;
+
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
@@ -24,7 +27,7 @@ function initCube(size) {
   container.innerHTML = "";
   container.appendChild(renderer.domElement);
 
-  // Lights (THIS WAS A BIG ISSUE BEFORE)
+  // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
   const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -33,7 +36,7 @@ function initCube(size) {
 
   // Cube
   cubeGroup = new THREE.Group();
-  const offset = (size - 1) / 2;
+  const offset = (cubeSize - 1) / 2;
 
   const colors = [
     0xff0000, // red
@@ -44,26 +47,26 @@ function initCube(size) {
     0xffffff  // white
   ];
 
-  for (let x = 0; x < size; x++) {
-    for (let y = 0; y < size; y++) {
-      for (let z = 0; z < size; z++) {
+  for (let x = 0; x < cubeSize; x++) {
+    for (let y = 0; y < cubeSize; y++) {
+      for (let z = 0; z < cubeSize; z++) {
 
         const materials = colors.map(c =>
           new THREE.MeshStandardMaterial({ color: c })
         );
 
-        const cube = new THREE.Mesh(
+        const cubie = new THREE.Mesh(
           new THREE.BoxGeometry(0.95, 0.95, 0.95),
           materials
         );
 
-        cube.position.set(
+        cubie.position.set(
           x - offset,
           y - offset,
           z - offset
         );
 
-        cubeGroup.add(cube);
+        cubeGroup.add(cubie);
       }
     }
   }
@@ -77,9 +80,51 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-function rotateCube(dx, dy) {
-  cubeGroup.rotation.y += dx;
-  cubeGroup.rotation.x += dy;
+// ======================
+// RUBIK'S CUBE TWIST LOGIC
+// ======================
+let isRotating = false;
+
+function rotateLayer(axis, layerIndex, direction = 1) {
+  if (isRotating) return;
+  isRotating = true;
+
+  const angle = Math.PI / 2 * direction;
+  const layerGroup = new THREE.Group();
+
+  cubeGroup.children.forEach(cubie => {
+    if (Math.round(cubie.position[axis]) === layerIndex) {
+      layerGroup.add(cubie);
+    }
+  });
+
+  cubeGroup.add(layerGroup);
+
+  let rotated = 0;
+  const step = 0.1 * direction;
+
+  function animateRotation() {
+    layerGroup.rotation[axis] += step;
+    rotated += Math.abs(step);
+
+    if (rotated < Math.abs(angle)) {
+      requestAnimationFrame(animateRotation);
+    } else {
+      layerGroup.rotation[axis] = angle;
+      layerGroup.updateMatrixWorld();
+
+      while (layerGroup.children.length) {
+        const cubie = layerGroup.children[0];
+        cubie.applyMatrix4(layerGroup.matrix);
+        cubeGroup.add(cubie);
+      }
+
+      cubeGroup.remove(layerGroup);
+      isRotating = false;
+    }
+  }
+
+  animateRotation();
 }
 
 // ======================
@@ -102,15 +147,19 @@ hands.setOptions({
 });
 
 hands.onResults(results => {
-  if (!results.multiHandLandmarks.length) return;
+  if (!results.multiHandLandmarks.length || isRotating) return;
 
   const tip = results.multiHandLandmarks[0][8];
 
   if (lastX !== null) {
-    rotateCube(
-      (tip.x - lastX) * 4,
-      (tip.y - lastY) * 4
-    );
+    const dx = tip.x - lastX;
+    const dy = tip.y - lastY;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      rotateLayer("y", 1, dx > 0 ? 1 : -1);
+    } else {
+      rotateLayer("x", 1, dy > 0 ? -1 : 1);
+    }
   }
 
   lastX = tip.x;
@@ -128,12 +177,24 @@ const cam = new Camera(video, {
 cam.start();
 
 // ======================
-// UI
+// UI + TEST CONTROLS
 // ======================
 initCube(3);
 
 document.getElementById("cubeSize").addEventListener("change", e => {
   initCube(Number(e.target.value));
+});
+
+// Keyboard test (VERY IMPORTANT)
+window.addEventListener("keydown", e => {
+  if (isRotating) return;
+
+  if (e.key === "r") rotateLayer("x", 1, 1);
+  if (e.key === "l") rotateLayer("x", -1, -1);
+  if (e.key === "u") rotateLayer("y", 1, 1);
+  if (e.key === "d") rotateLayer("y", -1, -1);
+  if (e.key === "f") rotateLayer("z", 1, 1);
+  if (e.key === "b") rotateLayer("z", -1, -1);
 });
 
 window.addEventListener("resize", () => {
