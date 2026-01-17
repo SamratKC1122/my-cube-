@@ -1,7 +1,6 @@
-// ======================
-// BASIC THREE.JS SETUP
-// ======================
-let scene, camera, renderer, cubeGroup;
+let scene, camera, renderer;
+let viewGroup, cubeGroup;
+
 const cubeSize = 3;
 const spacing = 1;
 const cubies = [];
@@ -10,13 +9,16 @@ let isTurning = false;
 init();
 animate();
 
+// ======================
+// INIT
+// ======================
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
   camera = new THREE.PerspectiveCamera(
     45,
-    window.innerWidth / window.innerHeight,
+    innerWidth / innerHeight,
     0.1,
     100
   );
@@ -24,8 +26,8 @@ function init() {
   camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
   document.getElementById("scene").appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -33,28 +35,29 @@ function init() {
   light.position.set(5, 10, 7);
   scene.add(light);
 
+  // 🔑 VIEW GROUP (ROTATION ONLY)
+  viewGroup = new THREE.Group();
+  scene.add(viewGroup);
+
+  // 🔑 CUBE GROUP (LOGIC ONLY)
   cubeGroup = new THREE.Group();
-  scene.add(cubeGroup);
+  viewGroup.add(cubeGroup);
 
   createCube();
 }
 
 // ======================
-// CREATE RUBIK'S CUBE
+// CREATE CUBE
 // ======================
 function createCube() {
   cubies.length = 0;
   cubeGroup.clear();
 
   const offset = (cubeSize - 1) / 2;
-
   const colors = [
-    0xff0000, // red
-    0xff8800, // orange
-    0xffffff, // white
-    0xffff00, // yellow
-    0x00ff00, // green
-    0x0000ff  // blue
+    0xff0000, 0xff8800,
+    0xffffff, 0xffff00,
+    0x00ff00, 0x0000ff
   ];
 
   for (let x = 0; x < cubeSize; x++) {
@@ -91,7 +94,7 @@ function createCube() {
 }
 
 // ======================
-// TRUE LAYER ROTATION
+// TRUE LAYER TWIST
 // ======================
 function rotateLayer(axis, layer, dir) {
   if (isTurning) return;
@@ -149,81 +152,29 @@ function rotateLayer(axis, layer, dir) {
 }
 
 // ======================
-// MOUSE ROTATION (STABLE)
+// MOUSE = VIEW ROTATION
 // ======================
 let dragging = false;
-let prevX = 0;
-let prevY = 0;
+let px = 0, py = 0;
 
-renderer.domElement.addEventListener("mousedown", e => {
+renderer?.domElement?.addEventListener?.("mousedown", e => {
   dragging = true;
-  prevX = e.clientX;
-  prevY = e.clientY;
+  px = e.clientX;
+  py = e.clientY;
 });
 
 window.addEventListener("mouseup", () => dragging = false);
 
 window.addEventListener("mousemove", e => {
   if (!dragging) return;
-
-  const dx = e.clientX - prevX;
-  const dy = e.clientY - prevY;
-
-  cubeGroup.rotation.y += dx * 0.005;
-  cubeGroup.rotation.x += dy * 0.005;
-
-  prevX = e.clientX;
-  prevY = e.clientY;
+  viewGroup.rotation.y += (e.clientX - px) * 0.005;
+  viewGroup.rotation.x += (e.clientY - py) * 0.005;
+  px = e.clientX;
+  py = e.clientY;
 });
 
 // ======================
-// HAND ROTATION (NO AUTO MOVE)
-// ======================
-const video = document.getElementById("video");
-let lastX = null, lastY = null;
-
-const hands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-});
-
-hands.setOptions({
-  maxNumHands: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
-
-hands.onResults(res => {
-  if (!res.multiHandLandmarks.length) {
-    lastX = lastY = null;
-    return;
-  }
-
-  const p = res.multiHandLandmarks[0][8];
-
-  if (lastX !== null) {
-    const dx = p.x - lastX;
-    const dy = p.y - lastY;
-    const threshold = 0.01;
-
-    if (Math.abs(dx) > threshold)
-      cubeGroup.rotation.y += dx * 6;
-
-    if (Math.abs(dy) > threshold)
-      cubeGroup.rotation.x += dy * 6;
-  }
-
-  lastX = p.x;
-  lastY = p.y;
-});
-
-new Camera(video, {
-  onFrame: async () => await hands.send({ image: video }),
-  width: 640,
-  height: 480
-}).start();
-
-// ======================
-// KEYBOARD LAYER TWISTS
+// KEYBOARD = LAYER TWISTS
 // ======================
 window.addEventListener("keydown", e => {
   if (isTurning) return;
@@ -235,8 +186,6 @@ window.addEventListener("keydown", e => {
   if (e.key === "b") rotateLayer("z", -1, -1);
 });
 
-// ======================
-// RENDER LOOP
 // ======================
 function animate() {
   requestAnimationFrame(animate);
