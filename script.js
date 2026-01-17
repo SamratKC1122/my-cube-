@@ -1,113 +1,209 @@
-/* ===================== HAND TRACKING ===================== */
+// ================= THREE GLOBALS =================
+let scene, camera, renderer;
+let viewGroup, cubeGroup;
+let cubeSize = 3;
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("overlay");
-const ctx = canvas.getContext("2d");
+// ================= INIT =================
+init();
+animate();
 
-video.onloadedmetadata = () => {
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-};
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x111111);
 
-const hands = new Hands({
-  locateFile: file =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
+  camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+  camera.position.set(6, 6, 8);
+  camera.lookAt(0, 0, 0);
 
-hands.setOptions({
-  maxNumHands: 2,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
+  document.getElementById("scene").appendChild(renderer.domElement);
 
-hands.onResults(results => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(5, 10, 7);
+  scene.add(light);
 
-  if (!results.multiHandLandmarks) return;
+  viewGroup = new THREE.Group();
+  scene.add(viewGroup);
 
-  results.multiHandLandmarks.forEach(landmarks => {
-    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
-      color: "#00ffcc",
-      lineWidth: 3
-    });
-    drawLandmarks(ctx, landmarks, {
-      color: "#ffcc00",
-      radius: 4
-    });
+  cubeGroup = new THREE.Group();
+  viewGroup.add(cubeGroup);
+
+  createCube();
+
+  document.getElementById("cubeSize").addEventListener("change", e => {
+    cubeSize = Number(e.target.value);
+    createCube();
   });
-});
 
-const cam = new Camera(video, {
-  onFrame: async () => {
-    await hands.send({ image: video });
-  },
-  width: 1280,
-  height: 720
-});
+  initMouse();
+  initHands();
+}
 
-cam.start();
+// ================= CREATE CUBE =================
+function createCube() {
+  cubeGroup.clear();
+  const offset = (cubeSize - 1) / 2;
 
-/* ===================== THREE.JS ===================== */
+  const colors = [
+    0xff0000, // red
+    0xff8800, // orange
+    0xffffff, // white
+    0xffff00, // yellow
+    0x00ff00, // green
+    0x0000ff  // blue
+  ];
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+  for (let x = 0; x < cubeSize; x++) {
+    for (let y = 0; y < cubeSize; y++) {
+      for (let z = 0; z < cubeSize; z++) {
 
-const camera3d = new THREE.PerspectiveCamera(
-  45,
-  window.innerWidth / (window.innerHeight * 0.6),
-  0.1,
-  100
-);
+        const materials = colors.map(c =>
+          new THREE.MeshStandardMaterial({ color: c })
+        );
 
-camera3d.position.set(5, 5, 7);
-camera3d.lookAt(0, 0, 0);
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(0.95, 0.95, 0.95),
+          materials
+        );
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight * 0.6);
-document.getElementById("scene").appendChild(renderer.domElement);
+        cube.position.set(
+          x - offset,
+          y - offset,
+          z - offset
+        );
 
-/* LIGHTS */
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dir = new THREE.DirectionalLight(0xffffff, 1);
-dir.position.set(5, 10, 7);
-scene.add(dir);
+        cubeGroup.add(cube);
+      }
+    }
+  }
+}
 
-/* SIMPLE CUBE (STABLE BASE) */
-const cube = new THREE.Mesh(
-  new THREE.BoxGeometry(3, 3, 3),
-  new THREE.MeshStandardMaterial({ color: 0x3366ff })
-);
-scene.add(cube);
+// ================= MOUSE ROTATION =================
+function initMouse() {
+  let dragging = false;
+  let px = 0, py = 0;
 
-/* ===================== MOUSE ROTATION ===================== */
+  renderer.domElement.addEventListener("mousedown", e => {
+    dragging = true;
+    px = e.clientX;
+    py = e.clientY;
+  });
 
-let dragging = false;
-let prevX = 0;
-let prevY = 0;
+  window.addEventListener("mouseup", () => dragging = false);
 
-renderer.domElement.addEventListener("mousedown", e => {
-  dragging = true;
-  prevX = e.clientX;
-  prevY = e.clientY;
-});
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    viewGroup.rotation.y += (e.clientX - px) * 0.005;
+    viewGroup.rotation.x += (e.clientY - py) * 0.005;
+    px = e.clientX;
+    py = e.clientY;
+  });
+}
 
-window.addEventListener("mouseup", () => dragging = false);
+// ================= HAND TRACKING =================
+function initHands() {
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
 
-window.addEventListener("mousemove", e => {
-  if (!dragging) return;
+  let lastX = null;
+  let lastY = null;
+  let canvasReady = false;
 
-  cube.rotation.y += (e.clientX - prevX) * 0.005;
-  cube.rotation.x += (e.clientY - prevY) * 0.005;
+  const hands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
 
-  prevX = e.clientX;
-  prevY = e.clientY;
-});
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
+  });
 
-/* ===================== LOOP ===================== */
+  hands.onResults(res => {
+    if (!canvasReady) return;
 
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!res.multiHandLandmarks || res.multiHandLandmarks.length === 0) {
+      lastX = lastY = null;
+      return;
+    }
+
+    const lm = res.multiHandLandmarks[0];
+
+    // ---- DRAW DOTS ----
+    ctx.fillStyle = "lime";
+    for (const p of lm) {
+      ctx.beginPath();
+      ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ---- DRAW SKELETON ----
+    ctx.strokeStyle = "cyan";
+    ctx.lineWidth = 2;
+
+    const links = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],
+      [0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20]
+    ];
+
+    for (const [a,b] of links) {
+      ctx.beginPath();
+      ctx.moveTo(lm[a].x * canvas.width, lm[a].y * canvas.height);
+      ctx.lineTo(lm[b].x * canvas.width, lm[b].y * canvas.height);
+      ctx.stroke();
+    }
+
+    // ---- ROTATE CUBE ----
+    const tip = lm[8];
+    if (lastX !== null) {
+      const dx = tip.x - lastX;
+      const dy = tip.y - lastY;
+      const dead = 0.01;
+
+      if (Math.abs(dx) > dead) viewGroup.rotation.y += dx * 6;
+      if (Math.abs(dy) > dead) viewGroup.rotation.x += dy * 6;
+    }
+
+    lastX = tip.x;
+    lastY = tip.y;
+  });
+
+  const cam = new Camera(video, {
+    onFrame: async () => {
+      await hands.send({ image: video });
+    },
+    width: 640,
+    height: 480
+  });
+
+  cam.start();
+
+  video.onloadedmetadata = () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvasReady = true;
+  };
+}
+
+// ================= RENDER LOOP =================
 function animate() {
   requestAnimationFrame(animate);
-  renderer.render(scene, camera3d);
+  renderer.render(scene, camera);
 }
-animate();
+
+// ================= RESIZE =================
+window.addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
