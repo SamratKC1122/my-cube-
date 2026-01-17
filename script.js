@@ -1,3 +1,6 @@
+// ======================
+// GLOBALS
+// ======================
 let scene, camera, renderer;
 let viewGroup, cubeGroup;
 
@@ -6,19 +9,19 @@ const spacing = 1;
 const cubies = [];
 let isTurning = false;
 
-init();
-animate();
-
 // ======================
 // INIT
 // ======================
+init();
+animate();
+
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
   camera = new THREE.PerspectiveCamera(
     45,
-    innerWidth / innerHeight,
+    window.innerWidth / window.innerHeight,
     0.1,
     100
   );
@@ -26,8 +29,8 @@ function init() {
   camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
   document.getElementById("scene").appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -35,11 +38,11 @@ function init() {
   light.position.set(5, 10, 7);
   scene.add(light);
 
-  // 🔑 VIEW GROUP (ROTATION ONLY)
+  // View group (camera interaction only)
   viewGroup = new THREE.Group();
   scene.add(viewGroup);
 
-  // 🔑 CUBE GROUP (LOGIC ONLY)
+  // Cube group (Rubik’s logic only)
   cubeGroup = new THREE.Group();
   viewGroup.add(cubeGroup);
 
@@ -55,9 +58,12 @@ function createCube() {
 
   const offset = (cubeSize - 1) / 2;
   const colors = [
-    0xff0000, 0xff8800,
-    0xffffff, 0xffff00,
-    0x00ff00, 0x0000ff
+    0xff0000, // red
+    0xff8800, // orange
+    0xffffff, // white
+    0xffff00, // yellow
+    0x00ff00, // green
+    0x0000ff  // blue
   ];
 
   for (let x = 0; x < cubeSize; x++) {
@@ -94,7 +100,7 @@ function createCube() {
 }
 
 // ======================
-// TRUE LAYER TWIST
+// TRUE LAYER ROTATION
 // ======================
 function rotateLayer(axis, layer, dir) {
   if (isTurning) return;
@@ -152,29 +158,86 @@ function rotateLayer(axis, layer, dir) {
 }
 
 // ======================
-// MOUSE = VIEW ROTATION
+// MOUSE ROTATION (VIEW)
 // ======================
 let dragging = false;
-let px = 0, py = 0;
+let prevX = 0, prevY = 0;
 
-renderer?.domElement?.addEventListener?.("mousedown", e => {
+renderer.domElement.addEventListener("mousedown", e => {
   dragging = true;
-  px = e.clientX;
-  py = e.clientY;
+  prevX = e.clientX;
+  prevY = e.clientY;
 });
 
 window.addEventListener("mouseup", () => dragging = false);
 
 window.addEventListener("mousemove", e => {
   if (!dragging) return;
-  viewGroup.rotation.y += (e.clientX - px) * 0.005;
-  viewGroup.rotation.x += (e.clientY - py) * 0.005;
-  px = e.clientX;
-  py = e.clientY;
+
+  const dx = e.clientX - prevX;
+  const dy = e.clientY - prevY;
+
+  viewGroup.rotation.y += dx * 0.005;
+  viewGroup.rotation.x += dy * 0.005;
+
+  prevX = e.clientX;
+  prevY = e.clientY;
 });
 
 // ======================
-// KEYBOARD = LAYER TWISTS
+// HAND ROTATION (FIXED)
+// ======================
+const video = document.getElementById("video");
+let lastX = null;
+let lastY = null;
+
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+hands.onResults(results => {
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    lastX = null;
+    lastY = null;
+    return;
+  }
+
+  const tip = results.multiHandLandmarks[0][8];
+
+  if (lastX !== null && lastY !== null) {
+    const dx = tip.x - lastX;
+    const dy = tip.y - lastY;
+
+    const deadzone = 0.008;
+    const strength = 8;
+
+    if (Math.abs(dx) > deadzone)
+      viewGroup.rotation.y += dx * strength;
+
+    if (Math.abs(dy) > deadzone)
+      viewGroup.rotation.x += dy * strength;
+  }
+
+  lastX = tip.x;
+  lastY = tip.y;
+});
+
+new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video });
+  },
+  width: 640,
+  height: 480
+}).start();
+
+// ======================
+// KEYBOARD LAYER TWISTS
 // ======================
 window.addEventListener("keydown", e => {
   if (isTurning) return;
@@ -187,13 +250,15 @@ window.addEventListener("keydown", e => {
 });
 
 // ======================
+// RENDER LOOP
+// ======================
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
 }
 
 window.addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
