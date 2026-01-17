@@ -1,12 +1,15 @@
+// ======================
+// BASIC THREE.JS SETUP
+// ======================
 let scene, camera, renderer, cubeGroup;
 const cubeSize = 3;
 const spacing = 1;
 const cubies = [];
 let isTurning = false;
 
-// ======================
-// INIT
-// ======================
+init();
+animate();
+
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
@@ -18,15 +21,12 @@ function init() {
     100
   );
   camera.position.set(6, 6, 8);
-  camera.lookAt(0, 0, 0); // 🔴 FIX 1
+  camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
-
-  const container = document.getElementById("scene");
-  container.innerHTML = "";
-  container.appendChild(renderer.domElement);
+  document.getElementById("scene").appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
   const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -37,11 +37,10 @@ function init() {
   scene.add(cubeGroup);
 
   createCube();
-  animate();
 }
 
 // ======================
-// CREATE CUBE
+// CREATE RUBIK'S CUBE
 // ======================
 function createCube() {
   cubies.length = 0;
@@ -50,12 +49,12 @@ function createCube() {
   const offset = (cubeSize - 1) / 2;
 
   const colors = [
-    0xff0000, // R
-    0xff8800, // O
-    0xffffff, // W
-    0xffff00, // Y
-    0x00ff00, // G
-    0x0000ff  // B
+    0xff0000, // red
+    0xff8800, // orange
+    0xffffff, // white
+    0xffff00, // yellow
+    0x00ff00, // green
+    0x0000ff  // blue
   ];
 
   for (let x = 0; x < cubeSize; x++) {
@@ -108,13 +107,13 @@ function rotateLayer(axis, layer, dir) {
   let rotated = 0;
   const speed = 0.1;
 
-  function animateTurn() {
+  function spin() {
     const step = Math.min(speed, angle - rotated);
     group.rotation[axis] += step * dir;
     rotated += step;
 
     if (rotated < angle) {
-      requestAnimationFrame(animateTurn);
+      requestAnimationFrame(spin);
     } else {
       affected.forEach(c => {
         const { x, y, z } = c.userData.coord;
@@ -146,11 +145,39 @@ function rotateLayer(axis, layer, dir) {
     }
   }
 
-  animateTurn();
+  spin();
 }
 
 // ======================
-// HAND = VIEW ROTATION ONLY
+// MOUSE ROTATION (STABLE)
+// ======================
+let dragging = false;
+let prevX = 0;
+let prevY = 0;
+
+renderer.domElement.addEventListener("mousedown", e => {
+  dragging = true;
+  prevX = e.clientX;
+  prevY = e.clientY;
+});
+
+window.addEventListener("mouseup", () => dragging = false);
+
+window.addEventListener("mousemove", e => {
+  if (!dragging) return;
+
+  const dx = e.clientX - prevX;
+  const dy = e.clientY - prevY;
+
+  cubeGroup.rotation.y += dx * 0.005;
+  cubeGroup.rotation.x += dy * 0.005;
+
+  prevX = e.clientX;
+  prevY = e.clientY;
+});
+
+// ======================
+// HAND ROTATION (NO AUTO MOVE)
 // ======================
 const video = document.getElementById("video");
 let lastX = null, lastY = null;
@@ -165,14 +192,26 @@ hands.setOptions({
   minTrackingConfidence: 0.7
 });
 
-hands.onResults(r => {
-  if (!r.multiHandLandmarks.length) return;
-
-  const p = r.multiHandLandmarks[0][8];
-  if (lastX !== null) {
-    cubeGroup.rotation.y += (p.x - lastX) * 2;
-    cubeGroup.rotation.x += (p.y - lastY) * 2;
+hands.onResults(res => {
+  if (!res.multiHandLandmarks.length) {
+    lastX = lastY = null;
+    return;
   }
+
+  const p = res.multiHandLandmarks[0][8];
+
+  if (lastX !== null) {
+    const dx = p.x - lastX;
+    const dy = p.y - lastY;
+    const threshold = 0.01;
+
+    if (Math.abs(dx) > threshold)
+      cubeGroup.rotation.y += dx * 6;
+
+    if (Math.abs(dy) > threshold)
+      cubeGroup.rotation.x += dy * 6;
+  }
+
   lastX = p.x;
   lastY = p.y;
 });
@@ -184,7 +223,7 @@ new Camera(video, {
 }).start();
 
 // ======================
-// KEYBOARD CONTROLS
+// KEYBOARD LAYER TWISTS
 // ======================
 window.addEventListener("keydown", e => {
   if (isTurning) return;
@@ -197,15 +236,15 @@ window.addEventListener("keydown", e => {
 });
 
 // ======================
+// RENDER LOOP
+// ======================
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
 }
 
 window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
-
-init();
