@@ -3,6 +3,7 @@
 // ======================
 let scene, camera, renderer, cubeGroup;
 let cubeSize = 3;
+let isRotating = false;
 
 function initCube(size) {
   cubeSize = size;
@@ -27,30 +28,22 @@ function initCube(size) {
   container.innerHTML = "";
   container.appendChild(renderer.domElement);
 
-  // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(5, 10, 7);
+  scene.add(dir);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-  dirLight.position.set(5, 10, 7);
-  scene.add(dirLight);
-
-  // Cube
   cubeGroup = new THREE.Group();
   const offset = (cubeSize - 1) / 2;
 
   const colors = [
-    0xff0000, // red
-    0x00ff00, // green
-    0x0000ff, // blue
-    0xffff00, // yellow
-    0xff8800, // orange
-    0xffffff  // white
+    0xff0000, 0x00ff00, 0x0000ff,
+    0xffff00, 0xff8800, 0xffffff
   ];
 
   for (let x = 0; x < cubeSize; x++) {
     for (let y = 0; y < cubeSize; y++) {
       for (let z = 0; z < cubeSize; z++) {
-
         const materials = colors.map(c =>
           new THREE.MeshStandardMaterial({ color: c })
         );
@@ -81,50 +74,62 @@ function animate() {
 }
 
 // ======================
-// RUBIK'S CUBE TWIST LOGIC
+// GRID SNAP (CRITICAL)
 // ======================
-let isRotating = false;
+function snapCubie(c) {
+  c.position.x = Math.round(c.position.x);
+  c.position.y = Math.round(c.position.y);
+  c.position.z = Math.round(c.position.z);
 
-function rotateLayer(axis, layerIndex, direction = 1) {
+  c.rotation.x = Math.round(c.rotation.x / (Math.PI / 2)) * (Math.PI / 2);
+  c.rotation.y = Math.round(c.rotation.y / (Math.PI / 2)) * (Math.PI / 2);
+  c.rotation.z = Math.round(c.rotation.z / (Math.PI / 2)) * (Math.PI / 2);
+}
+
+// ======================
+// REAL LAYER ROTATION
+// ======================
+function rotateLayer(axis, layer, dir) {
   if (isRotating) return;
   isRotating = true;
 
-  const angle = Math.PI / 2 * direction;
-  const layerGroup = new THREE.Group();
+  const angle = Math.PI / 2 * dir;
+  const group = new THREE.Group();
 
-  cubeGroup.children.forEach(cubie => {
-    if (Math.round(cubie.position[axis]) === layerIndex) {
-      layerGroup.add(cubie);
+  cubeGroup.children.forEach(c => {
+    if (Math.round(c.position[axis]) === layer) {
+      group.add(c);
     }
   });
 
-  cubeGroup.add(layerGroup);
+  cubeGroup.add(group);
 
   let rotated = 0;
-  const step = 0.1 * direction;
+  const step = 0.1 * dir;
 
-  function animateRotation() {
-    layerGroup.rotation[axis] += step;
+  function anim() {
+    group.rotation[axis] += step;
     rotated += Math.abs(step);
 
     if (rotated < Math.abs(angle)) {
-      requestAnimationFrame(animateRotation);
+      requestAnimationFrame(anim);
     } else {
-      layerGroup.rotation[axis] = angle;
-      layerGroup.updateMatrixWorld();
+      group.rotation[axis] = angle;
+      group.updateMatrixWorld();
 
-      while (layerGroup.children.length) {
-        const cubie = layerGroup.children[0];
-        cubie.applyMatrix4(layerGroup.matrix);
-        cubeGroup.add(cubie);
+      while (group.children.length) {
+        const c = group.children[0];
+        c.applyMatrix4(group.matrix);
+        snapCubie(c);
+        cubeGroup.add(c);
       }
 
-      cubeGroup.remove(layerGroup);
+      cubeGroup.remove(group);
       isRotating = false;
     }
   }
 
-  animateRotation();
+  anim();
 }
 
 // ======================
@@ -133,10 +138,14 @@ function rotateLayer(axis, layerIndex, direction = 1) {
 const video = document.getElementById("video");
 let lastX = null;
 let lastY = null;
+let lastAction = 0;
+
+const SWIPE_THRESHOLD = 0.08;
+const COOLDOWN = 600;
 
 const hands = new Hands({
-  locateFile: file =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  locateFile: f =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
 });
 
 hands.setOptions({
@@ -146,24 +155,37 @@ hands.setOptions({
   minTrackingConfidence: 0.7
 });
 
-hands.onResults(results => {
-  if (!results.multiHandLandmarks.length || isRotating) return;
+hands.onResults(res => {
+  if (!res.multiHandLandmarks.length) return;
 
-  const tip = results.multiHandLandmarks[0][8];
-
-  if (lastX !== null) {
-    const dx = tip.x - lastX;
-    const dy = tip.y - lastY;
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      rotateLayer("y", 1, dx > 0 ? 1 : -1);
-    } else {
-      rotateLayer("x", 1, dy > 0 ? -1 : 1);
-    }
+  const p = res.multiHandLandmarks[0][8];
+  if (lastX === null) {
+    lastX = p.x;
+    lastY = p.y;
+    return;
   }
 
-  lastX = tip.x;
-  lastY = tip.y;
+  const dx = p.x - lastX;
+  const dy = p.y - lastY;
+  const now = Date.now();
+
+  // 👉 deliberate swipe → twist
+  if (
+    Math.abs(dx) > SWIPE_THRESHOLD &&
+    now - lastAction > COOLDOWN
+  ) {
+    rotateLayer("y", Math.sign(dx), 1);
+    lastAction = now;
+  }
+
+  // ✋ slow movement → rotate whole cube
+  if (!isRotating) {
+    cubeGroup.rotation.y += dx * 1.5;
+    cubeGroup.rotation.x += dy * 1.5;
+  }
+
+  lastX = p.x;
+  lastY = p.y;
 });
 
 const cam = new Camera(video, {
@@ -173,29 +195,12 @@ const cam = new Camera(video, {
   width: 640,
   height: 480
 });
-
 cam.start();
 
 // ======================
-// UI + TEST CONTROLS
+// INIT + RESIZE
 // ======================
 initCube(3);
-
-document.getElementById("cubeSize").addEventListener("change", e => {
-  initCube(Number(e.target.value));
-});
-
-// Keyboard test (VERY IMPORTANT)
-window.addEventListener("keydown", e => {
-  if (isRotating) return;
-
-  if (e.key === "r") rotateLayer("x", 1, 1);
-  if (e.key === "l") rotateLayer("x", -1, -1);
-  if (e.key === "u") rotateLayer("y", 1, 1);
-  if (e.key === "d") rotateLayer("y", -1, -1);
-  if (e.key === "f") rotateLayer("z", 1, 1);
-  if (e.key === "b") rotateLayer("z", -1, -1);
-});
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
