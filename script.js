@@ -1,26 +1,32 @@
-// ======================
-// THREE SETUP
-// ======================
 let scene, camera, renderer, cubeGroup;
 const cubeSize = 3;
 const spacing = 1;
+const cubies = [];
+let isTurning = false;
 
+// ======================
+// INIT
+// ======================
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
   camera = new THREE.PerspectiveCamera(
-    50,
-    innerWidth / innerHeight,
+    45,
+    window.innerWidth / window.innerHeight,
     0.1,
     100
   );
   camera.position.set(6, 6, 8);
+  camera.lookAt(0, 0, 0); // 🔴 FIX 1
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(devicePixelRatio);
-  document.getElementById("scene").appendChild(renderer.domElement);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+
+  const container = document.getElementById("scene");
+  container.innerHTML = "";
+  container.appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
   const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -34,32 +40,29 @@ function init() {
   animate();
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  renderer.render(scene, camera);
-}
-
 // ======================
-// CUBE CREATION
+// CREATE CUBE
 // ======================
-const cubies = [];
-
 function createCube() {
   cubies.length = 0;
   cubeGroup.clear();
 
   const offset = (cubeSize - 1) / 2;
 
-  const faceColors = [
-    0xff0000, 0x00ff00, 0x0000ff,
-    0xffff00, 0xff8800, 0xffffff
+  const colors = [
+    0xff0000, // R
+    0xff8800, // O
+    0xffffff, // W
+    0xffff00, // Y
+    0x00ff00, // G
+    0x0000ff  // B
   ];
 
   for (let x = 0; x < cubeSize; x++) {
     for (let y = 0; y < cubeSize; y++) {
       for (let z = 0; z < cubeSize; z++) {
 
-        const materials = faceColors.map(c =>
+        const materials = colors.map(c =>
           new THREE.MeshStandardMaterial({ color: c })
         );
 
@@ -91,34 +94,28 @@ function createCube() {
 // ======================
 // TRUE LAYER ROTATION
 // ======================
-let isTurning = false;
-
 function rotateLayer(axis, layer, dir) {
   if (isTurning) return;
   isTurning = true;
 
-  const angle = Math.PI / 2 * dir;
+  const angle = Math.PI / 2;
   const group = new THREE.Group();
   cubeGroup.add(group);
 
   const affected = cubies.filter(c => c.userData.coord[axis] === layer);
-
-  affected.forEach(c => {
-    group.add(c);
-  });
+  affected.forEach(c => group.add(c));
 
   let rotated = 0;
   const speed = 0.1;
 
-  function spin() {
-    const step = Math.min(speed, Math.abs(angle - rotated));
+  function animateTurn() {
+    const step = Math.min(speed, angle - rotated);
     group.rotation[axis] += step * dir;
     rotated += step;
 
-    if (rotated < Math.abs(angle)) {
-      requestAnimationFrame(spin);
+    if (rotated < angle) {
+      requestAnimationFrame(animateTurn);
     } else {
-      // Apply logical rotation
       affected.forEach(c => {
         const { x, y, z } = c.userData.coord;
 
@@ -149,15 +146,14 @@ function rotateLayer(axis, layer, dir) {
     }
   }
 
-  spin();
+  animateTurn();
 }
 
 // ======================
 // HAND = VIEW ROTATION ONLY
 // ======================
 const video = document.getElementById("video");
-let lastX = null;
-let lastY = null;
+let lastX = null, lastY = null;
 
 const hands = new Hands({
   locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
@@ -169,10 +165,10 @@ hands.setOptions({
   minTrackingConfidence: 0.7
 });
 
-hands.onResults(res => {
-  if (!res.multiHandLandmarks.length || isTurning) return;
+hands.onResults(r => {
+  if (!r.multiHandLandmarks.length) return;
 
-  const p = res.multiHandLandmarks[0][8];
+  const p = r.multiHandLandmarks[0][8];
   if (lastX !== null) {
     cubeGroup.rotation.y += (p.x - lastX) * 2;
     cubeGroup.rotation.x += (p.y - lastY) * 2;
@@ -182,15 +178,13 @@ hands.onResults(res => {
 });
 
 new Camera(video, {
-  onFrame: async () => {
-    await hands.send({ image: video });
-  },
+  onFrame: async () => await hands.send({ image: video }),
   width: 640,
   height: 480
 }).start();
 
 // ======================
-// KEYBOARD = EXPLICIT TWISTS
+// KEYBOARD CONTROLS
 // ======================
 window.addEventListener("keydown", e => {
   if (isTurning) return;
@@ -203,4 +197,15 @@ window.addEventListener("keydown", e => {
 });
 
 // ======================
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
 init();
