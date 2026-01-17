@@ -6,31 +6,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
 
-<div id="controls">
-  <select id="cubeSize">
-    <option value="2">2×2</option>
-    <option value="3" selected>3×3</option>
-    <option value="4">4×4</option>
-    <option value="5">5×5</option>
-  </select>
-</div>
-
-<div id="scene"></div>
-
-<div id="camBox">
+<!-- CAMERA + HAND OVERLAY -->
+<div id="cameraBox">
   <video id="video" autoplay playsinline></video>
   <canvas id="overlay"></canvas>
 </div>
 
-<!-- THREE.JS -->
+<!-- 3D SCENE -->
+<div id="scene"></div>
+
+<!-- LIBRARIES -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 
-<!-- MEDIAPIPE -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <script src="script.js"></script>
 </body>
