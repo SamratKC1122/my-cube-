@@ -1,36 +1,23 @@
-// ======================
-// GLOBALS
-// ======================
 let scene, camera, renderer;
 let viewGroup, cubeGroup;
+let cubies = [];
+let cubeSize = 3;
 
-const cubeSize = 3;
-const spacing = 1;
-const cubies = [];
-let isTurning = false;
-
-// ======================
-// INIT
-// ======================
 init();
 animate();
 
+// ================= INIT =================
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
-  camera = new THREE.PerspectiveCamera(
-    45,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    100
-  );
+  camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
   camera.position.set(6, 6, 8);
   camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
   document.getElementById("scene").appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -38,32 +25,33 @@ function init() {
   light.position.set(5, 10, 7);
   scene.add(light);
 
-  // View group (camera interaction only)
   viewGroup = new THREE.Group();
   scene.add(viewGroup);
 
-  // Cube group (Rubik’s logic only)
   cubeGroup = new THREE.Group();
   viewGroup.add(cubeGroup);
 
   createCube();
+
+  document.getElementById("cubeSize").addEventListener("change", e => {
+    cubeSize = Number(e.target.value);
+    createCube();
+  });
+
+  initMouse();
+  initHands();
 }
 
-// ======================
-// CREATE CUBE
-// ======================
+// ================= CREATE CUBE =================
 function createCube() {
-  cubies.length = 0;
+  cubies = [];
   cubeGroup.clear();
 
   const offset = (cubeSize - 1) / 2;
   const colors = [
-    0xff0000, // red
-    0xff8800, // orange
-    0xffffff, // white
-    0xffff00, // yellow
-    0x00ff00, // green
-    0x0000ff  // blue
+    0xff0000, 0xff8800,
+    0xffffff, 0xffff00,
+    0x00ff00, 0x0000ff
   ];
 
   for (let x = 0; x < cubeSize; x++) {
@@ -79,17 +67,10 @@ function createCube() {
           materials
         );
 
-        const coord = {
-          x: x - offset,
-          y: y - offset,
-          z: z - offset
-        };
-
-        mesh.userData.coord = { ...coord };
         mesh.position.set(
-          coord.x * spacing,
-          coord.y * spacing,
-          coord.z * spacing
+          x - offset,
+          y - offset,
+          z - offset
         );
 
         cubies.push(mesh);
@@ -99,166 +80,82 @@ function createCube() {
   }
 }
 
-// ======================
-// TRUE LAYER ROTATION
-// ======================
-function rotateLayer(axis, layer, dir) {
-  if (isTurning) return;
-  isTurning = true;
+// ================= MOUSE ROTATION =================
+function initMouse() {
+  let dragging = false;
+  let px = 0, py = 0;
 
-  const angle = Math.PI / 2;
-  const group = new THREE.Group();
-  cubeGroup.add(group);
+  renderer.domElement.addEventListener("mousedown", e => {
+    dragging = true;
+    px = e.clientX;
+    py = e.clientY;
+  });
 
-  const affected = cubies.filter(c => c.userData.coord[axis] === layer);
-  affected.forEach(c => group.add(c));
+  window.addEventListener("mouseup", () => dragging = false);
 
-  let rotated = 0;
-  const speed = 0.1;
-
-  function spin() {
-    const step = Math.min(speed, angle - rotated);
-    group.rotation[axis] += step * dir;
-    rotated += step;
-
-    if (rotated < angle) {
-      requestAnimationFrame(spin);
-    } else {
-      affected.forEach(c => {
-        const { x, y, z } = c.userData.coord;
-
-        if (axis === "x") {
-          c.userData.coord.y = dir * -z;
-          c.userData.coord.z = dir * y;
-        }
-        if (axis === "y") {
-          c.userData.coord.x = dir * z;
-          c.userData.coord.z = dir * -x;
-        }
-        if (axis === "z") {
-          c.userData.coord.x = dir * -y;
-          c.userData.coord.y = dir * x;
-        }
-
-        c.position.set(
-          c.userData.coord.x * spacing,
-          c.userData.coord.y * spacing,
-          c.userData.coord.z * spacing
-        );
-
-        cubeGroup.add(c);
-      });
-
-      cubeGroup.remove(group);
-      isTurning = false;
-    }
-  }
-
-  spin();
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    viewGroup.rotation.y += (e.clientX - px) * 0.005;
+    viewGroup.rotation.x += (e.clientY - py) * 0.005;
+    px = e.clientX;
+    py = e.clientY;
+  });
 }
 
-// ======================
-// MOUSE ROTATION (VIEW)
-// ======================
-let dragging = false;
-let prevX = 0, prevY = 0;
+// ================= HAND TRACKING =================
+function initHands() {
+  const video = document.getElementById("video");
+  let lastX = null;
+  let lastY = null;
 
-renderer.domElement.addEventListener("mousedown", e => {
-  dragging = true;
-  prevX = e.clientX;
-  prevY = e.clientY;
-});
+  const hands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
 
-window.addEventListener("mouseup", () => dragging = false);
+  hands.setOptions({
+    maxNumHands: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
+  });
 
-window.addEventListener("mousemove", e => {
-  if (!dragging) return;
+  hands.onResults(res => {
+    if (!res.multiHandLandmarks.length) {
+      lastX = lastY = null;
+      return;
+    }
 
-  const dx = e.clientX - prevX;
-  const dy = e.clientY - prevY;
+    const p = res.multiHandLandmarks[0][8];
 
-  viewGroup.rotation.y += dx * 0.005;
-  viewGroup.rotation.x += dy * 0.005;
+    if (lastX !== null) {
+      const dx = p.x - lastX;
+      const dy = p.y - lastY;
+      const dead = 0.01;
 
-  prevX = e.clientX;
-  prevY = e.clientY;
-});
+      if (Math.abs(dx) > dead) viewGroup.rotation.y += dx * 6;
+      if (Math.abs(dy) > dead) viewGroup.rotation.x += dy * 6;
+    }
 
-// ======================
-// HAND ROTATION (FIXED)
-// ======================
-const video = document.getElementById("video");
-let lastX = null;
-let lastY = null;
+    lastX = p.x;
+    lastY = p.y;
+  });
 
-const hands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-});
+  new Camera(video, {
+    onFrame: async () => {
+      await hands.send({ image: video });
+    },
+    width: 640,
+    height: 480
+  }).start();
+}
 
-hands.setOptions({
-  maxNumHands: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
-
-hands.onResults(results => {
-  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-    lastX = null;
-    lastY = null;
-    return;
-  }
-
-  const tip = results.multiHandLandmarks[0][8];
-
-  if (lastX !== null && lastY !== null) {
-    const dx = tip.x - lastX;
-    const dy = tip.y - lastY;
-
-    const deadzone = 0.008;
-    const strength = 8;
-
-    if (Math.abs(dx) > deadzone)
-      viewGroup.rotation.y += dx * strength;
-
-    if (Math.abs(dy) > deadzone)
-      viewGroup.rotation.x += dy * strength;
-  }
-
-  lastX = tip.x;
-  lastY = tip.y;
-});
-
-new Camera(video, {
-  onFrame: async () => {
-    await hands.send({ image: video });
-  },
-  width: 640,
-  height: 480
-}).start();
-
-// ======================
-// KEYBOARD LAYER TWISTS
-// ======================
-window.addEventListener("keydown", e => {
-  if (isTurning) return;
-  if (e.key === "r") rotateLayer("x", 1, 1);
-  if (e.key === "l") rotateLayer("x", -1, -1);
-  if (e.key === "u") rotateLayer("y", 1, 1);
-  if (e.key === "d") rotateLayer("y", -1, -1);
-  if (e.key === "f") rotateLayer("z", 1, 1);
-  if (e.key === "b") rotateLayer("z", -1, -1);
-});
-
-// ======================
-// RENDER LOOP
-// ======================
+// ================= RENDER =================
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
 }
 
 window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
